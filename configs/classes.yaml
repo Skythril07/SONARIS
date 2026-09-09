@@ -1,0 +1,29 @@
+# The unified class taxonomy — the contract between datasets/ and models/ (layout §5.2).
+#
+# Closed-set classes are supervised by YOLO-Seg. The open-set anomaly class is handled by a
+# SEPARATE head (plan override #3) and is NEVER trained as a normal YOLO class.
+# The `note` fields are not decoration — they are what you read out when a judge asks what
+# the model was actually trained on.
+
+classes:
+  fishing_gear:
+    sources: [ghostvision]
+    note: >-
+      Crab pots today (rigid-frame). NOT relabelled as ghost nets (plan override #2).
+      Sub-type to crab_pot / net / other_gear once real labels exist.
+  pipe_cable:
+    sources: [subpipe]
+  wreck_large_object:
+    sources: [ai4shipwrecks, klsg]
+
+open_set:
+  man_made_anomaly:
+    sources: []
+    note: >-
+      No direct training source. Surfaced by the open-set anomaly head (P2.6), NOT the
+      closed-set YOLO class list (plan override #3).
+
+negatives:
+  manmade_structure_nontarget:
+    sources: [swdd]
+    note: "Harbour walls — hard negatives to suppress false positives."

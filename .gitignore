@@ -1,0 +1,25 @@
+# data is large / licensed — never commit (layout §1)
+data/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# notebooks scratch
+.ipynb_checkpoints/
+
+# model / export artefacts
+*.pt
+*.onnx
+
+# os
+.DS_Store
+Thumbs.db

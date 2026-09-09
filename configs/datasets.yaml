@@ -1,0 +1,41 @@
+# Per-dataset paths, licences, and class maps.
+# Fill paths + licences at plan gate P1.5 (scripts/download_datasets.sh).
+# `class_map` maps each dataset's native labels onto the unified taxonomy in classes.yaml.
+# MVP formats: `image` (PNG/JPG + YOLO labels) and `xtf` only. Consumer formats are Phase 2.
+
+datasets:
+  ghostvision:
+    path: data/raw/ghostvision
+    licence: TODO
+    format: image
+    class_map:
+      crab_pot: fishing_gear
+
+  subpipe:
+    path: data/raw/subpipe
+    licence: TODO
+    format: image
+    class_map:
+      pipe: pipe_cable
+      cable: pipe_cable
+
+  ai4shipwrecks:
+    path: data/raw/ai4shipwrecks
+    licence: TODO
+    format: image
+    class_map:
+      shipwreck: wreck_large_object
+
+  klsg:
+    path: data/raw/klsg
+    licence: TODO
+    format: image
+    class_map:
+      wreck: wreck_large_object
+
+  swdd:
+    path: data/raw/swdd
+    licence: TODO
+    format: image
+    class_map:
+      harbour_wall: manmade_structure_nontarget   # negative (hard)

@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sonaris"
+version = "0.0.1"
+description = "AI-powered underwater marine debris and anomaly detection from side-scan sonar (SIH26057)."
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "pandas",
+  "pyarrow",
+  "scipy",
+  "opencv-python-headless",
+  "pyxtf",
+  "pyproj",
+  "shapely",
+  "gpxpy",
+  "pyyaml",
+]
+
+# Heavier / later-phase deps kept out of the core install so the pipeline path
+# is never blocked by a model or web dependency. See plan.md §3 and §5.
+[project.optional-dependencies]
+ml = ["torch", "ultralytics", "onnx", "onnxruntime"]
+app = ["fastapi", "uvicorn[standard]", "python-multipart", "aiosqlite", "pillow"]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+sonaris = "sonaris.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100

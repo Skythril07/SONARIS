@@ -1,0 +1,57 @@
+# SONARIS default configuration.
+# Rule (layout §4): if a number appears in code, it is a bug. Everything tunable lives here.
+# Phase-2+ features are present but disabled, so the config is stable while code gates them.
+
+geometry:
+  ground_res_m: 0.10
+  bottom_track:
+    method: max_gradient          # used only when SensorPrimaryAltitude is absent
+    search_window_frac: 0.35
+
+preprocess:
+  clahe: {clip_limit: 2.0, tile_grid: [8, 8]}
+  denoise: {enabled: false}       # SRAD deferred (plan Phase 2)
+  channels: [raw_norm, clahe]
+
+tiling:
+  size_px: 640
+  stride_frac: 0.5                # overlap enables cross-tile persistence (P2.1)
+
+detect:
+  model: yolo11s-seg             # YOLO-Seg: class + bbox + mask in one model (plan override #1)
+  imgsz: 640
+  conf_min: 0.15                  # deliberately low; filtering happens later
+  nms_iou: 0.7                    # MVP dedup is per-tile NMS; world clustering is P2.1
+
+runtime:
+  gnss_accuracy_m: 3.0            # constant term in position_uncertainty (layout §3.2)
+
+# ---------------------------------------------------------------------------
+# Phase 2 and later — present for stability, gated off until their plan gate.
+# ---------------------------------------------------------------------------
+
+segment:
+  backend: none                   # YOLO-Seg masks used directly; SAM/MobileSAM optional (P2.7)
+
+aggregate:
+  cluster_radius_m: 3.0           # world-space clustering (P2.1)
+  alpha: 0.90                     # confidence vs persistence weight
+
+verify:
+  shadow: {enabled: false, min_shadow_px: 4}   # P2.2; MVP emits consistency bool only
+  height: {enabled: false}                      # shadow-derived height H=h*L/(R+L) is P2.4
+  plausibility:
+    enabled: false                              # P2.3 — metric size + aspect gates
+    fishing_gear:       {len_m: [1.0, 40.0], aspect: [1.0, 12.0]}
+    pipe_cable:         {len_m: [2.0, 200.0], aspect: [4.0, 100.0]}
+    wreck_large_object: {len_m: [5.0, 150.0], aspect: [1.0, 8.0]}
+
+calibrate:
+  enabled: false                  # temperature scaling deferred (P2.5)
+  method: temperature
+
+anomaly:
+  enabled: false                  # open-set head, separate from closed-set YOLO (P2.6)
+
+report:
+  formats: [geojson, csv, gpx]
