@@ -25,6 +25,8 @@ detect:
 
 runtime:
   gnss_accuracy_m: 3.0            # constant term in position_uncertainty (layout §3.2)
+  heading_accuracy_deg: 2.0       # heading uncertainty; lateral error = radians(this) * range
+  layback_uncertainty_frac: 0.10  # fraction of |layback| added when towfish pos is derived
 
 # ---------------------------------------------------------------------------
 # Phase 2 and later — present for stability, gated off until their plan gate.

@@ -92,6 +92,85 @@ def _cmd_decode(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def _cmd_infer(args: argparse.Namespace) -> int:
+    """[P1.7 stub, P1.3 gate] Stub detector: plant one detection at the brightest seabed sample,
+    push it through the real coordinate chain, and write GeoJSON. No ML -- this proves geometry.
+    """
+    if not getattr(args, "stub", False):
+        return _stub(args)
+
+    p = Path(args.input)
+    if not p.exists():
+        print(f"[sonaris] file not found: {p}")
+        return 2
+
+    import numpy as np
+
+    from .geometry.georef import detection_to_latlon, position_uncertainty
+    from .geometry.slant_range import remove_water_column
+    from .io.xtf_reader import NavUnitsError, read_xtf
+    from .report.schema import Detection
+    from .report.writers import write_geojson
+
+    try:
+        line = read_xtf(p)
+    except NavUnitsError as e:
+        print(f"[sonaris] REFUSED: {e}")
+        return 1
+
+    # Stub "detector": the single brightest sample beyond the nadir, across all channels/pings.
+    best = None  # (intensity, side, ping, sample_idx)
+    for side, pings in line.channels.items():
+        for ping in pings:
+            if ping.n_samples <= 0 or ping.slant_range_m <= 0:
+                continue
+            res_slant = ping.slant_range_m / ping.n_samples
+            beyond, nadir_idx = remove_water_column(ping.samples, ping.altitude_m, res_slant)
+            if beyond.shape[0] == 0:
+                continue
+            k = int(np.argmax(beyond))
+            intensity = float(beyond[k])
+            if best is None or intensity > best[0]:
+                best = (intensity, side, ping, nadir_idx + k)
+
+    if best is None:
+        print("[sonaris] no seabed samples beyond the nadir; nothing to detect.")
+        return 1
+
+    _, side, ping, sample_idx = best
+    res_slant = ping.slant_range_m / ping.n_samples
+    r_slant = sample_idx * res_slant
+    r_ground = float(np.sqrt(max(0.0, r_slant**2 - ping.altitude_m**2)))
+    lat, lon = detection_to_latlon(ping, r_ground, side)
+    unc = position_uncertainty(ping, r_ground)
+
+    det = Detection(
+        detection_id=f"{line.line_id}-stub-0",
+        line_id=line.line_id,
+        cls="stub",
+        confidence=1.0,
+        confidence_raw=1.0,
+        lat=lat,
+        lon=lon,
+        position_uncertainty_m=unc,
+        length_m=0.0,
+        width_m=0.0,
+        ground_range_m=r_ground,
+        channel=side,
+        ping_index=ping.index,
+    )
+
+    out = Path(args.out) if args.out else Path("data/outputs/detections.geojson")
+    write_geojson([det], out)
+
+    print(f"line_id      : {line.line_id}")
+    print(f"detection    : {side} ping={ping.index} sample={sample_idx} intensity={best[0]:.0f}")
+    print(f"ground_range : {r_ground:.2f} m")
+    print(f"position     : lat={lat:.6f} lon={lon:.6f}  (+/- {unc:.2f} m)")
+    print(f"wrote        : {out}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="sonaris",
@@ -114,6 +193,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     i = sub.add_parser("infer", help="[P1.7] detect + filter + georeference")
     i.add_argument("input")
+    i.add_argument("--stub", action="store_true",
+                   help="[P1.3] no-ML stub: brightest sample -> coordinate chain -> GeoJSON")
+    i.add_argument("--out", help="output GeoJSON path (default data/outputs/detections.geojson)")
 
     r = sub.add_parser("report", help="[P1.8] write GeoJSON/CSV/GPX")
     r.add_argument("input")
@@ -124,7 +206,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     for name in _STAGE_GATE:
         sub.choices[name].set_defaults(func=_stub)
-    sub.choices["decode"].set_defaults(func=_cmd_decode)   # P1.1 — implemented
+    sub.choices["decode"].set_defaults(func=_cmd_decode)   # P1.1 - implemented
+    sub.choices["infer"].set_defaults(func=_cmd_infer)     # P1.3 stub path (--stub)
     return p
 
 
