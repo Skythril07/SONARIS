@@ -92,6 +92,138 @@ def _cmd_decode(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def _load_line_or_none(p: Path):
+    """Shared front door for correct/tile: validate path, decode, surface refusals cleanly."""
+    from .io.xtf_reader import NavUnitsError, read_xtf
+
+    if not p.exists():
+        print(f"[sonaris] file not found: {p}")
+        return None, 2
+    if p.suffix.lower() != ".xtf":
+        print(f"[sonaris] expects a survey file (.xtf); got '{p.suffix}'.")
+        return None, 2
+    try:
+        return read_xtf(p), 0
+    except NavUnitsError as e:
+        print(f"[sonaris] REFUSED: {e}")
+        return None, 1
+
+
+def _cmd_correct(args: argparse.Namespace) -> int:
+    """[P1.2] Slant->ground correct each channel into a waterfall; write .npy + sidecar + PNG."""
+    import json
+
+    import cv2
+    import numpy as np
+
+    from .config import load_config
+    from .geometry.correct import correct_line
+    from .preprocess.enhance import normalize_uint8
+
+    cfg = load_config()
+    ground_res_m = cfg["geometry"]["ground_res_m"]
+    norm = cfg["preprocess"]["normalize"]
+
+    p = Path(args.input)
+    line, code = _load_line_or_none(p)
+    if line is None:
+        return code
+
+    out_dir = Path(args.out) if args.out else Path("data/interim") / line.line_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"line_id      : {line.line_id}")
+    ok = True
+    for channel in line.channels:
+        cl = correct_line(line, channel, ground_res_m)
+        np.save(out_dir / f"{channel}_ground.npy", cl.image)
+        cv2.imwrite(
+            str(out_dir / f"{channel}_ground.png"),
+            normalize_uint8(cl.image, norm["p_low"], norm["p_high"]),
+        )
+        with open(out_dir / f"{channel}_ground.json", "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "line_id": cl.line_id,
+                    "channel": cl.channel,
+                    "source_file": line.source_file,
+                    "ground_res_m": cl.ground_res_m,
+                    "shape": list(cl.image.shape),
+                    "ping_index": cl.ping_index.tolist(),
+                    "altitude_m": cl.altitude_m.tolist(),
+                    "bottom_idx": cl.bottom_idx.tolist(),
+                },
+                f,
+            )
+        h, w = cl.image.shape
+        print(f"  {channel:4s}: image {h}x{w}  ground_res={cl.ground_res_m} m  -> {channel}_ground.npy/.png")
+        ok = ok and h > 0 and w > 0
+    print(f"wrote        : {out_dir}")
+    print(f"\nG2 {'PASS' if ok else 'FAIL'}")
+    return 0 if ok else 1
+
+
+def _cmd_tile(args: argparse.Namespace) -> int:
+    """[P1.4] Correct + preprocess + tile each channel; write tile .npy stacks + tiles.parquet.
+
+    The tile index (tiles.parquet) is the only route back to world coordinates -- it records the
+    ping-row and ground-column origin of every tile, never the filename (layout section 2.3).
+    """
+    import json
+
+    import numpy as np
+
+    from .config import load_config
+    from .geometry.correct import correct_line
+    from .preprocess.enhance import build_stack
+    from .preprocess.tiling import TileRef, iter_tiles, tiles_dataframe
+
+    cfg = load_config()
+    ground_res_m = cfg["geometry"]["ground_res_m"]
+    size_px = cfg["tiling"]["size_px"]
+    stride_frac = cfg["tiling"]["stride_frac"]
+
+    p = Path(args.input)
+    line, code = _load_line_or_none(p)
+    if line is None:
+        return code
+
+    out_dir = Path(args.out) if args.out else Path("data/processed") / line.line_id
+    tiles_dir = out_dir / "tiles"
+    tiles_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"line_id      : {line.line_id}")
+    refs: list[TileRef] = []
+    for channel in line.channels:
+        cl = correct_line(line, channel, ground_res_m)
+        stack = build_stack(cl.image, cfg["preprocess"])
+        # Sidecar: image row -> ping mapping, needed to recover world coords from the tile index.
+        with open(out_dir / f"{channel}.meta.json", "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "line_id": cl.line_id, "channel": channel, "source_file": line.source_file,
+                    "ground_res_m": cl.ground_res_m, "ping_index": cl.ping_index.tolist(),
+                },
+                f,
+            )
+        n_before = len(refs)
+        for ping_start, ping_end, col_start, col_end, tile in iter_tiles(stack, size_px, stride_frac):
+            tile_id = f"{line.line_id}_{channel}_p{ping_start}_c{col_start}"
+            rel = f"tiles/{tile_id}.npy"
+            np.save(out_dir / rel, tile)
+            refs.append(TileRef(
+                tile_id=tile_id, line_id=line.line_id, channel=channel,
+                ping_start=ping_start, ping_end=ping_end, col_start=col_start, col_end=col_end,
+                ground_res_m=cl.ground_res_m, path=rel,
+            ))
+        print(f"  {channel:4s}: stack {stack.shape} -> {len(refs) - n_before} tiles")
+
+    df = tiles_dataframe(refs)
+    df.to_parquet(out_dir / "tiles.parquet", index=False)
+    print(f"wrote        : {out_dir / 'tiles.parquet'} ({len(df)} tiles)")
+    return 0 if len(df) else 1
+
+
 def _cmd_infer(args: argparse.Namespace) -> int:
     """[P1.7 stub, P1.3 gate] Stub detector: plant one detection at the brightest seabed sample,
     push it through the real coordinate chain, and write GeoJSON. No ML -- this proves geometry.
@@ -184,9 +316,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     c = sub.add_parser("correct", help="[P1.2] slant->ground range; write corrected waterfall")
     c.add_argument("input")
+    c.add_argument("--out", help="output dir (default data/interim/<line_id>)")
 
     t = sub.add_parser("tile", help="[P1.4] preprocess + tile; write tiles.parquet")
     t.add_argument("input")
+    t.add_argument("--out", help="output dir (default data/processed/<line_id>)")
 
     tr = sub.add_parser("train", help="[P1.6] train baseline YOLO-Seg")
     tr.add_argument("--data")
@@ -207,6 +341,8 @@ def build_parser() -> argparse.ArgumentParser:
     for name in _STAGE_GATE:
         sub.choices[name].set_defaults(func=_stub)
     sub.choices["decode"].set_defaults(func=_cmd_decode)   # P1.1 - implemented
+    sub.choices["correct"].set_defaults(func=_cmd_correct)  # P1.2 - ground-range waterfall
+    sub.choices["tile"].set_defaults(func=_cmd_tile)        # P1.4 - tiling + tiles.parquet
     sub.choices["infer"].set_defaults(func=_cmd_infer)     # P1.3 stub path (--stub)
     return p
 

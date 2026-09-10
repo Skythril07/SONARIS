@@ -9,6 +9,7 @@ geometry:
     search_window_frac: 0.35
 
 preprocess:
+  normalize: {p_low: 1.0, p_high: 99.0}   # percentile stretch to 8-bit (robust to outliers)
   clahe: {clip_limit: 2.0, tile_grid: [8, 8]}
   denoise: {enabled: false}       # SRAD deferred (plan Phase 2)
   channels: [raw_norm, clahe]
