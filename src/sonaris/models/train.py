@@ -32,7 +32,23 @@ def train(data_yaml, cfg: dict, out_dir="data/outputs/train") -> dict:
 
     detect = cfg["detect"]
     model = YOLO(f"{detect['model']}.pt")
-    results = model.train(data=str(data_yaml), imgsz=detect["imgsz"], project=str(out_dir))
-    # results.box.map50 is the control metric; keep it -- never delete this number.
+    results = model.train(
+        data=str(data_yaml),
+        imgsz=detect.get("imgsz", 640),
+        epochs=detect.get("epochs", 100),
+        batch=detect.get("batch", 16),
+        device=detect.get("device", 0),
+        project=str(out_dir),
+        name=detect.get("run_name", "control"),
+    )
+    # mAP@50 is THE control metric -- keep it, never delete this number. Ultralytics stores it in
+    # results_dict under 'metrics/mAP50(B)'; surface it explicitly so callers don't have to dig.
     metrics = getattr(results, "results_dict", {}) or {}
-    return {"data": str(data_yaml), "model": detect["model"], "metrics": metrics}
+    map50 = metrics.get("metrics/mAP50(B)")
+    return {
+        "data": str(data_yaml),
+        "model": detect["model"],
+        "map50": map50,
+        "metrics": metrics,
+        "save_dir": str(getattr(results, "save_dir", "")),
+    }

@@ -19,8 +19,15 @@ tiling:
   stride_frac: 0.5                # overlap enables cross-tile persistence (P2.1)
 
 detect:
-  model: yolo11s-seg             # YOLO-Seg: class + bbox + mask in one model (plan override #1)
+  # P1.6 control is YOLO-detect (bbox), not Seg: the only real labelled source (ghostvision crab
+  # pots) ships bounding boxes, not masks. Seg (plan override #1) is deferred until a mask-labelled
+  # source exists; swap back to yolo11s-seg then. imgsz 640 matches the ghostvision tile size.
+  model: yolo11s                  # detect variant (single class: fishing_gear)
   imgsz: 640
+  epochs: 60                      # control run length; raise once the baseline mAP@50 is banked
+  batch: 16                       # fits an 8 GB GPU at 640; use -1 for ultralytics auto-batch
+  device: 0                       # CUDA GPU index; set to "cpu" if training without a GPU
+  run_name: control               # data/outputs/train/<run_name>/ holds weights + results.csv
   conf_min: 0.15                  # deliberately low; filtering happens later
   nms_iou: 0.7                    # MVP dedup is per-tile NMS; world clustering is P2.1
   stub:                           # classical blob detector: stands in for YOLO until P1.6 trains
@@ -44,10 +51,13 @@ aggregate:
   alpha: 0.90                     # confidence vs persistence weight
 
 verify:
-  shadow: {enabled: false, min_shadow_px: 4}   # P2.2; MVP emits consistency bool only
+  # P2.2 shadow consistency: bool only (height is P2.4). min_drop_frac = how much darker the zone
+  # just beyond a detection (higher ground range) must be than its highlight to count as a shadow.
+  shadow: {enabled: false, min_shadow_px: 4, min_drop_frac: 0.5}
   height: {enabled: false}                      # shadow-derived height H=h*L/(R+L) is P2.4
   plausibility:
     enabled: false                              # P2.3 — metric size + aspect gates
+    drop: false                                 # flag implausible by default; true removes them
     fishing_gear:       {len_m: [1.0, 40.0], aspect: [1.0, 12.0]}
     pipe_cable:         {len_m: [2.0, 200.0], aspect: [4.0, 100.0]}
     wreck_large_object: {len_m: [5.0, 150.0], aspect: [1.0, 8.0]}

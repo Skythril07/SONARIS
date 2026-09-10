@@ -16,6 +16,11 @@ dist/
 # notebooks scratch
 .ipynb_checkpoints/
 
+# frontend deps / build (never commit node_modules — the frontend branch did by mistake)
+node_modules/
+sonaris-demo-frontend/dist/
+.vite/
+
 # model / export artefacts
 *.pt
 *.onnx

@@ -1,0 +1,11 @@
+1. https://huggingface.co/datasets/PINGEcosystem/sss-crab-pot-detection-ds?utm_source=chatgpt.com\
+2. https://huggingface.co/datasets/PINGEcosystem/sss-crab-pot-detection-ds?utm_source=chatgpt.com
+3. https://www.frontiersin.org/journals/marine-science/articles/10.3389/fmars.2025.1542832/full?utm_source=chatgpt.com
+4. https://zenodo.org/records/13692547?utm_source=chatgpt.com
+5. https://github.com/remaro-network/OpenSonarDatasets?utm_source=chatgpt.com
+6. https://github.com/sonoware/sidescantools?utm_source=chatgpt.com
+7. https://github.com/DeeperSense/deepersense-seafloorscan
+8. https://zenodo.org/records/10209445?utm_source=chatgpt.com&preview_file=undefined
+9. https://github.com/automlresearch/SCTD-3.0?utm_source=chatgpt.com
+10. https://github.com/Jorwnpay/Awesome-Sonar-Image-Resources?utm_source=chatgpt.com
+11. https://github.com/TAWilts/HODOR?utm_source=chatgpt.com

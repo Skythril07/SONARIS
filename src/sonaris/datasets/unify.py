@@ -63,6 +63,36 @@ def class_counts(labels_by_survey: dict[str, list[str]]) -> dict[int, int]:
     return dict(sorted(counts.items()))
 
 
+def coco_bbox_to_yolo(
+    bbox: list[float], img_w: int, img_h: int
+) -> tuple[float, float, float, float] | None:
+    """Convert a COCO-style pixel bbox ``[x, y, w, h]`` (top-left origin) to a normalised YOLO
+    ``(cx, cy, w, h)`` tuple in ``[0, 1]``.
+
+    The box is clamped to the image extent before normalising; a degenerate box (non-positive
+    width/height, or one that lands fully outside the image) returns ``None`` so the caller can
+    drop it rather than emit a garbage label. A silent error here would plant *every* training
+    box at the wrong pixel -- the same class of quiet, well-formatted-but-wrong failure the
+    coordinate-chain gate guards against downstream -- so this is unit-tested.
+    """
+    if img_w <= 0 or img_h <= 0:
+        raise ValueError("image dimensions must be positive")
+    x, y, w, h = (float(v) for v in bbox)
+    if w <= 0 or h <= 0:
+        return None
+    x0 = min(max(x, 0.0), float(img_w))
+    y0 = min(max(y, 0.0), float(img_h))
+    x1 = min(max(x + w, 0.0), float(img_w))
+    y1 = min(max(y + h, 0.0), float(img_h))
+    bw = x1 - x0
+    bh = y1 - y0
+    if bw <= 0 or bh <= 0:
+        return None
+    cx = (x0 + bw / 2.0) / img_w
+    cy = (y0 + bh / 2.0) / img_h
+    return (cx, cy, bw / img_w, bh / img_h)
+
+
 def build_data_yaml(class_names: list[str], train_dirs: list[str], val_dirs: list[str]) -> dict:
     """Assemble an Ultralytics-style ``data.yaml`` dict for one split."""
     return {

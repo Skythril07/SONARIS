@@ -356,6 +356,8 @@ def _cmd_train(args: argparse.Namespace) -> int:
         print(f"[sonaris] {e}")
         return 1
     print(f"trained {result['model']} on {result['data']}")
+    print(f"mAP@50  : {result.get('map50')}   <- control metric (plan P1.6)")
+    print(f"weights : {result.get('save_dir')}")
     print(f"metrics : {result['metrics']}")
     return 0
 
@@ -370,8 +372,15 @@ def _cmd_run(args: argparse.Namespace) -> int:
     from .io.xtf_reader import NavUnitsError
     from .pipeline import run_pipeline
 
+    cfg = None
+    if args.verify:  # opt-in P2.2/P2.3 signals so the evidence panel shows real verdicts
+        from .config import load_config
+        cfg = load_config()
+        cfg["verify"]["shadow"]["enabled"] = True
+        cfg["verify"]["plausibility"]["enabled"] = True
+
     try:
-        dets = run_pipeline(p, args.out)
+        dets = run_pipeline(p, args.out, cfg=cfg, progress_path=args.progress)
     except NavUnitsError as e:
         print(f"[sonaris] REFUSED: {e}")
         return 1
@@ -384,6 +393,19 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if len(dets) > 10:
         print(f"  ... ({len(dets)} total)")
     print(f"wrote        : {args.out} (detections.geojson/csv/gpx, *_annotated.png, map.html)")
+    return 0
+
+
+def _cmd_serve(args: argparse.Namespace) -> int:
+    """[P3] Launch the operator-console backend (needs the app extra: fastapi + uvicorn)."""
+    try:
+        import uvicorn
+    except ImportError:
+        print("[sonaris] serve needs the app extra. Install: pip install -e '.[app]' (plan P3).")
+        return 1
+    from .web.app import app
+    print(f"[sonaris] operator console API on http://{args.host}:{args.port}")
+    uvicorn.run(app, host=args.host, port=args.port)
     return 0
 
 
@@ -423,6 +445,13 @@ def build_parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help="[P1] full vertical slice: file -> detections + reports")
     run.add_argument("--input", required=True)
     run.add_argument("--out", required=True)
+    run.add_argument("--progress", help="append per-stage JSON lines here (drives the web SSE rail)")
+    run.add_argument("--verify", action="store_true",
+                     help="enable P2.2 shadow + P2.3 plausibility signals for the evidence panel")
+
+    srv = sub.add_parser("serve", help="[P3] launch the FastAPI operator console backend")
+    srv.add_argument("--host", default="127.0.0.1")
+    srv.add_argument("--port", type=int, default=8000)
 
     for name in _STAGE_GATE:
         sub.choices[name].set_defaults(func=_stub)
@@ -433,6 +462,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.choices["report"].set_defaults(func=_cmd_report)   # P1.8 - report conversion
     sub.choices["train"].set_defaults(func=_cmd_train)     # P1.6 - YOLO-Seg train scaffold
     sub.choices["run"].set_defaults(func=_cmd_run)         # P1  - full vertical slice
+    sub.choices["serve"].set_defaults(func=_cmd_serve)     # P3  - web backend
     return p
 
 

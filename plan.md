@@ -151,7 +151,7 @@ Maintained continuously from P1.6 onward. This table is the SIH technical narrat
 
 | System | Precision | Recall | F1 | mAP@50 | FP rate |
 |---|---|---|---|---|---|
-| Baseline (raw image → YOLO-Seg) | | | | | |
+| **Baseline — YOLO-detect (yolo11s), GhostVision fishing_gear, held-out val** | **0.586** | **0.458** | **0.514** | **0.484** | — |
 | + preprocessing (normalize/CLAHE) | | | | | |
 | + world-space persistence | | | | | |
 | + shadow / plausibility verification | | | | | |

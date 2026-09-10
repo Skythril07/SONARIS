@@ -47,8 +47,12 @@ def test_detection_defaults_are_total():
     assert d.review_status == "unreviewed"
 
 
-def test_config_uses_yolo_seg():
-    assert load_config()["detect"]["model"] == "yolo11s-seg"   # override #1
+def test_detect_model_is_bbox_control():
+    # P1.6 control is YOLO-detect, not Seg: the only real labelled source (ghostvision crab pots)
+    # ships bounding boxes, not masks (see configs/default.yaml note). Seg (override #1) is deferred
+    # until a mask-labelled source exists -- guard that we use a NON-seg model until then.
+    model = load_config()["detect"]["model"]
+    assert not model.endswith("-seg"), f"detect.model {model!r} is a seg model but P1.6 trains detect"
 
 
 def test_taxonomy_is_corrected():
