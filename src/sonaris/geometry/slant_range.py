@@ -65,5 +65,8 @@ def slant_to_ground(
     r_slant = np.arange(nadir_idx, n, dtype=float) * res_slant
     r_ground = np.sqrt(np.maximum(0.0, r_slant**2 - altitude_m**2))
 
-    grid = np.arange(0.0, r_ground[-1] + ground_res_m, ground_res_m)
+    # Bins from 0 up to the last full ground_res step at or below the farthest echo -- no bin
+    # is placed beyond the real data (no extrapolation past r_ground[-1]).
+    n_bins = int(np.floor(r_ground[-1] / ground_res_m)) + 1
+    grid = np.arange(n_bins) * ground_res_m
     return np.interp(grid, r_ground, beyond.astype(float))

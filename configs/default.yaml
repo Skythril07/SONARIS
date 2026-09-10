@@ -23,6 +23,9 @@ detect:
   imgsz: 640
   conf_min: 0.15                  # deliberately low; filtering happens later
   nms_iou: 0.7                    # MVP dedup is per-tile NMS; world clustering is P2.1
+  stub:                           # classical blob detector: stands in for YOLO until P1.6 trains
+    threshold: 200                # raw_norm pixel intensity (0-255) counted as a hit
+    min_area_px: 2                # ignore blobs smaller than this many pixels
 
 runtime:
   gnss_accuracy_m: 3.0            # constant term in position_uncertainty (layout §3.2)

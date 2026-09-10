@@ -303,6 +303,90 @@ def _cmd_infer(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_report(args: argparse.Namespace) -> int:
+    """[P1.8] Convert a detection GeoJSON file into configured report formats."""
+    p = Path(args.input)
+    if not p.exists():
+        print(f"[sonaris] file not found: {p}")
+        return 2
+
+    import json
+
+    from .report.schema import Detection
+    from .report.writers import write_reports
+
+    try:
+        with open(p, encoding="utf-8") as f:
+            payload = json.load(f)
+        if payload.get("type") != "FeatureCollection":
+            raise ValueError("expected a GeoJSON FeatureCollection")
+        detections = []
+        for feature in payload["features"]:
+            geometry = feature["geometry"]
+            if geometry.get("type") != "Point":
+                raise ValueError("each GeoJSON feature must be a Point")
+            lon, lat = geometry["coordinates"]
+            detections.append(Detection(lat=lat, lon=lon, **dict(feature["properties"])))
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as e:
+        print(f"[sonaris] failed to read detections from {p}: {e}")
+        return 1
+
+    formats = args.formats.split(",") if args.formats else None
+    try:
+        reports = write_reports(detections, args.out, formats)
+    except ValueError as e:
+        print(f"[sonaris] failed to write reports: {e}")
+        return 1
+    for report_format, path in reports.items():
+        print(f"wrote {report_format}: {path}")
+    return 0
+
+
+def _cmd_train(args: argparse.Namespace) -> int:
+    """[P1.6] Train the baseline YOLO-Seg detector (needs the ml extra + a unified corpus)."""
+    if not args.data:
+        print("[sonaris] train needs --data <data.yaml> from datasets.unify (plan P1.5).")
+        return 2
+    from .config import load_config
+    from .models.train import train
+
+    try:
+        result = train(args.data, load_config())
+    except (RuntimeError, FileNotFoundError) as e:
+        print(f"[sonaris] {e}")
+        return 1
+    print(f"trained {result['model']} on {result['data']}")
+    print(f"metrics : {result['metrics']}")
+    return 0
+
+
+def _cmd_run(args: argparse.Namespace) -> int:
+    """[P1] Full vertical slice: XTF -> georeferenced detections + reports + map."""
+    p = Path(args.input)
+    if not p.exists():
+        print(f"[sonaris] file not found: {p}")
+        return 2
+
+    from .io.xtf_reader import NavUnitsError
+    from .pipeline import run_pipeline
+
+    try:
+        dets = run_pipeline(p, args.out)
+    except NavUnitsError as e:
+        print(f"[sonaris] REFUSED: {e}")
+        return 1
+
+    print(f"input        : {p}")
+    print(f"detections   : {len(dets)}")
+    for d in dets[:10]:
+        print(f"  {d.channel} ping={d.ping_index} r={d.ground_range_m:.1f}m "
+              f"lat={d.lat:.6f} lon={d.lon:.6f} +/-{d.position_uncertainty_m:.1f}m cls={d.cls}")
+    if len(dets) > 10:
+        print(f"  ... ({len(dets)} total)")
+    print(f"wrote        : {args.out} (detections.geojson/csv/gpx, *_annotated.png, map.html)")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="sonaris",
@@ -333,6 +417,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     r = sub.add_parser("report", help="[P1.8] write GeoJSON/CSV/GPX")
     r.add_argument("input")
+    r.add_argument("--out", required=True, help="output directory")
+    r.add_argument("--formats", help="comma-separated formats (default: config report.formats)")
 
     run = sub.add_parser("run", help="[P1] full vertical slice: file -> detections + reports")
     run.add_argument("--input", required=True)
@@ -344,6 +430,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub.choices["correct"].set_defaults(func=_cmd_correct)  # P1.2 - ground-range waterfall
     sub.choices["tile"].set_defaults(func=_cmd_tile)        # P1.4 - tiling + tiles.parquet
     sub.choices["infer"].set_defaults(func=_cmd_infer)     # P1.3 stub path (--stub)
+    sub.choices["report"].set_defaults(func=_cmd_report)   # P1.8 - report conversion
+    sub.choices["train"].set_defaults(func=_cmd_train)     # P1.6 - YOLO-Seg train scaffold
+    sub.choices["run"].set_defaults(func=_cmd_run)         # P1  - full vertical slice
     return p
 
 

@@ -66,6 +66,17 @@ def test_remove_water_column_drops_the_nadir_gap():
     assert beyond[0] == samples[nadir_idx]
 
 
+def test_remove_water_column_empty_input_stays_empty():
+    beyond, nadir_idx = remove_water_column(np.array([]), altitude_m=10.0, res_slant_m=0.25)
+    assert beyond.size == 0
+    assert nadir_idx == 0
+
+
+def test_remove_water_column_rejects_nonpositive_resolution():
+    with np.testing.assert_raises(ValueError):
+        remove_water_column(np.arange(3), altitude_m=1.0, res_slant_m=0.0)
+
+
 def test_slant_to_ground_grid_is_linear_in_metres():
     n, slant_range, altitude, ground_res = 200, 50.0, 10.0, 0.10
     samples = np.full(n, 10.0)
@@ -75,6 +86,28 @@ def test_slant_to_ground_grid_is_linear_in_metres():
     res_slant = slant_range / n
     r_ground_max = sqrt(((n - 1) * res_slant) ** 2 - altitude**2)
     assert abs((ground.shape[0] - 1) * ground_res - r_ground_max) <= ground_res
+
+
+def test_slant_to_ground_empty_input_returns_empty():
+    ground = slant_to_ground(np.array([]), slant_range_m=50.0, altitude_m=10.0, ground_res_m=0.1)
+    assert ground.size == 0
+
+
+def test_slant_to_ground_rejects_nonpositive_ranges_and_resolution():
+    samples = np.arange(10, dtype=float)
+    with np.testing.assert_raises(ValueError):
+        slant_to_ground(samples, slant_range_m=0.0, altitude_m=1.0, ground_res_m=0.1)
+    with np.testing.assert_raises(ValueError):
+        slant_to_ground(samples, slant_range_m=10.0, altitude_m=1.0, ground_res_m=0.0)
+
+
+def test_slant_to_ground_grid_length_and_interpolated_values_are_monotonic():
+    samples = np.arange(200, dtype=float)
+    slant_range, altitude, ground_res = 50.0, 10.0, 0.1
+    ground = slant_to_ground(samples, slant_range, altitude, ground_res)
+    r_ground_max = sqrt(((len(samples) - 1) * slant_range / len(samples)) ** 2 - altitude**2)
+    assert len(ground) == int(np.floor(r_ground_max / ground_res)) + 1
+    assert np.all(np.diff(ground) >= 0)
 
 
 def test_position_uncertainty_grows_with_range():

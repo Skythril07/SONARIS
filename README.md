@@ -21,13 +21,24 @@ console. It is built coordinate-chain-first: every detection carries a real, che
 ## Quickstart
 
 ```bash
-python -m venv .venv && . .venv/Scripts/activate     # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"          # core + dev; add ".[ml]" for the detector, ".[app]" for the web app
+# Windows PowerShell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"
 
-python scripts/verify_env.py     # G0 environment check
-sonaris --help                   # stage CLI (stages stubbed in Phase 0)
-pytest                           # contracts + config green; geometry test skipped until P1.3
+# From the repo root (works without activating the environment too)
+.\.venv\Scripts\python.exe scripts\verify_env.py
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\sonaris.exe decode <survey.xtf>
+.\.venv\Scripts\sonaris.exe infer <survey.xtf> --stub --out data\outputs\detections.geojson
 ```
+
+`decode` reads an XTF survey and checks its navigation. `infer --stub` is the verified
+no-model coordinate-chain demo: it finds a bright seabed sample and writes a GeoJSON point.
+
+`correct`, `tile`, `train`, and `run` are stub/planned commands (P1.x). `report` converts a
+GeoJSON detection file into configured reports (P1.8). Install `.[ml]` before model work and
+`.[app]` before the web app.
 
 ## Layout
 
